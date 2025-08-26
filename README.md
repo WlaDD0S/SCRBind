@@ -16,6 +16,8 @@
 | QD   | "Free GD?", "Nearest station - ST", "[DS ST] Safe shift!" | Всё связанное с дверями и охранником, а также AWS и SPAD |
 | SG   | "Zone # on manual control!", "Zone # on automatic control!", "[DS ST] please dispatch HC!" | Ничего |
 
+HC - HeadCode
+ST - Station
 
 ## Горячие клавиши
 - **F7** — отправляет выбранное сообщение.
