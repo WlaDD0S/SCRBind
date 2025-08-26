@@ -1,0 +1,32 @@
+name: Compile AHK to EXE
+
+on:
+  push:
+    branches:
+      - main   # срабатывает при пуше в main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      # Клонируем репозиторий
+      - uses: actions/checkout@v3
+
+      # Скачиваем AHK2EXE
+      - name: Download AHK Compiler
+        run: |
+          Invoke-WebRequest -Uri https://www.autohotkey.com/download/ahk2exe.zip -OutFile ahk2exe.zip
+          Expand-Archive ahk2exe.zip -DestinationPath ahk2exe
+
+      # Компилируем скрипт
+      - name: Compile Script
+        run: |
+          .\ahk2exe\Ahk2Exe.exe /in "myscript.ahk" /out "myscript.exe"
+
+      # Загружаем EXE как артефакт
+      - name: Upload EXE
+        uses: actions/upload-artifact@v3
+        with:
+          name: myscript-exe
+          path: myscript.exe
