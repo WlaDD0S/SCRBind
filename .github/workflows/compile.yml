@@ -1,32 +1,62 @@
-name: Compile AHK to EXE
+name: Build and Release AHK v2
 
 on:
   push:
     branches:
-      - main   # срабатывает при пуше в main
+      - main
+    paths:
+      - '**/*.ahk'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      # Клонируем репозиторий
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # Скачиваем AHK2EXE
-      - name: Download AHK Compiler
+      - name: Install AutoHotkey (Chocolatey)
+        run: choco install autohotkey -y
+
+      - name: Compile .ahk -> build/*.exe (AHK v2)
+        shell: powershell
         run: |
-          Invoke-WebRequest -Uri https://www.autohotkey.com/download/ahk2exe.zip -OutFile ahk2exe.zip
-          Expand-Archive ahk2exe.zip -DestinationPath ahk2exe
+          $ws = $env:GITHUB_WORKSPACE
+          $buildDir = Join-Path $ws 'build'
+          New-Item -Path $buildDir -ItemType Directory -Force | Out-Null
 
-      # Компилируем скрипт
-      - name: Compile Script
-        run: |
-          .\ahk2exe\Ahk2Exe.exe /in "myscript.ahk" /out "myscript.exe"
+          Write-Host "Searching for Ahk2Exe..."
+          $ahk2exe = Get-ChildItem -Path 'C:\Program Files','C:\Program Files (x86)' -Filter 'Ahk2Exe.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
 
-      # Загружаем EXE как артефакт
-      - name: Upload EXE
-        uses: actions/upload-artifact@v3
+          if (-not $ahk2exe) {
+            Write-Error "Ahk2Exe.exe not found on runner. Если пакет Chocolatey не содержит нужную версию Ahk2Exe для AHK v2, скачайте совместимую версию вручную или используйте self-hosted runner."
+            exit 1
+          }
+
+          $ahkFiles = Get-ChildItem -Path $ws -Filter '*.ahk' -Recurse
+          if ($ahkFiles.Count -eq 0) {
+            Write-Host "No .ahk files found. Nothing to compile."
+            exit 0
+          }
+
+          foreach ($f in $ahkFiles) {
+            $out = Join-Path $buildDir ("{0}.exe" -f $f.BaseName)
+            Write-Host "Compiling $($f.FullName) -> $out"
+            & $ahk2exe.FullName /in "$($f.FullName)" /out "$out"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Compilation failed for $($f.FullName)"
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Create GitHub Release and upload EXEs
+        uses: ncipollo/release-action@v1
         with:
-          name: myscript-exe
-          path: myscript.exe
+          tag: 'build-${{ github.run_number }}'
+          name: 'build-${{ github.run_number }}'
+          files: build/*.exe
+          draft: false
+          prerelease: false
