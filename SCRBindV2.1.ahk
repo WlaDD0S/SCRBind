@@ -1,4 +1,4 @@
-﻿#Requires AutoHotkey v2.0
+#Requires AutoHotkey v2.0
 
 ; --- Настройка клавиш ---
 global FastOffOnKey := "F3" ; Замените на любую клавишу которую хотите использовать для быстрого включения/выключения
@@ -53,7 +53,6 @@ TextList.OnEvent("Change", TextUpdate)
 myGui.Add("Text", "cFFFFFF", "Станция")
 global StationBox := myGui.Add("ComboBox", "Simple w380 r2")
 StationBox.Add(Stationlist[false])
-StationBox.Choose(1)
 StationBox.OnEvent("Change", StationUpdate)
 
 global StationTypeBox := MyGui.Add("CheckBox", "w360 cFFFFFF", "Полное название станций")
@@ -85,20 +84,24 @@ RoleUpdate(*) {
 		TextList.Add(RoleMessages[Role])
 		TextList.Choose(1)
 	}
+	TextUpdate
 }
 
-CodeUpdate(ctrl, info) {
+CodeUpdate(*) {
 	global HeadCode
-	HeadCode := ctrl.Text
+	HeadCode := Code.Text
 }
 
-TextUpdate(ctrl, info) {
+TextUpdate(*) {
 	global Tixt
-	Tixt := ctrl.Text
+	Tixt := TextList.Text
 }
 
-StationTypeUpdate(ctrl, info) {
+StationTypeUpdate(*) {
 	global StationBox, StationList, StationType
+	local Selected
+
+	Selected := StationBox.Value
 
 	if StationType {
 		StationType := false
@@ -107,14 +110,13 @@ StationTypeUpdate(ctrl, info) {
 	}
 
 	StationBox.Delete
-	if Stationlist.Has(StationType) {
-		StationBox.Add(Stationlist[StationType])
-		StationBox.Choose(1)
-	}
+	StationBox.Add(Stationlist[StationType])
+	StationBox.Choose(Selected)
+	StationUpdate
 }
-StationUpdate(ctrl, info) {
+StationUpdate(*) {
 	global Station
-	Station := ctrl.Text
+	Station := StationBox.Text
 }
 
 Print(ctrl) {
@@ -278,10 +280,10 @@ FastOffOn(*) {
 	global Working, RoleList, LastRole
 	if Working {
 		RoleList.Choose("OFF")
-		StopTesting()
+		RoleUpdate
 	} else {
 		RoleList.Choose(LastRole)
-		StartTesting()
+		RoleUpdate
 	}
 }
 
