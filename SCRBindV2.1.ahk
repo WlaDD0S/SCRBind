@@ -11,7 +11,7 @@ global LastRole := ""
 global Role := ""
 global HeadCode := ""
 global Tixt := ""
-global StationType := ""
+global StationType := true
 global Station := ""
 global Moving := true
 global isGuiVisible := false
@@ -20,48 +20,49 @@ global MainFn := 0
 
 ; --- Масивы ---
 RoleMessages := Map(
-	"GD", ["Someone need GD?", "Nearest station?", "[DS ST] Safe shift!"],
-	"DS", ["[HC] Safe trip!", "[HC] Safe trip & GD!"],
-	"QD", ["Free GD?", "Nearest station - ST", "[DS ST] Safe shift!"],
-	"SG", ["Zone # on manual control!", "Zone # on automatic control!", "[DS ST] please dispatch HC!"],
+	"GD", ["Someone need GD?", "Nearest station?", "[GD HC] - [ST DS] Safe shift!"],
+	"DS", ["[ST DS] - [HC] Safe trip!", "[ST DS] - [HC & GD] Safe trip!"],
+	"QD", ["Free GD?", "Nearest station - ST", "[HC] - [ST DS] Safe shift!"],
+	"SG", ["Zone # on manual control!", "Zone # on automatic control!", "[ST DS] please dispatch HC!"],
 	"OFF", ["Выберите роль!"]
 )
 
 Stationlist := Map(
 	true, ["Angel Pass", "Airport Central", "Airport Parkway", "Airport West", "Benton Bridge", "Barton", "Beechley", "Benton", "Bodin", "Beaulieu Park", "Berrily", "City Hospital", "Coxly Newtown", "Connolly", "Coxly", "Cambridge Street Parkway", "East Berrily", "Eden Quay", "Esterfield", "Edgemead", "Elsemere Junction", "Farleigh", "Faymere", "Faraday Road", "Financial Quarter", "Four Ways", "Greenslade", "High Street", "Leighton Stepford Road", "Leighton City", "Llyn-by-the-Sea", "Millcastle", "Morganstown", "Newry Harbour", "Newry", "Northshore", "Port Benton", "Rayleigh Bay", "Terminal 1", "Terminal 2", "Terminal 3", "Stepford Central", "Stepford Victoria", "St Helens Bridge", "Stepford East", "Stepford United Football Club", "West Benton", "Willowfield", "Woodhead Lane", "Whitefield Lido", "Water Newton", "Westercoast", "Westwyvern"],
-	false, ["Angel Pass", "AC", "AP", "AW", "BB", "Barton", "Beechley", "Benton", "Bodin", "BP", "Berrily", "CH", "CN", "Connolly", "Coxly", "CSP", "EB", "EQ", "Esterfield", "Edgemead", "EJ", "Farleigh", "Faymere", "FR", "FQ", "FW", "Greenslade", "HS", "LSR", "LC", "LBTS", "Millcastle", "Morganstown", "NH", "Newry", "Northshore", "PB", "RB", "T1", "T2", "T3", "SC", "SV", "SHB", "SE", "UFC", "WB", "WF", "WHL", "WFL", "WN", "WC", "WW"]
+	false, ["Angel Pass", "AC", "AP", "AW", "BB", "Barton", "Beechley", "Benton", "Bodin", "BP", "Berrily", "CH", "CN", "Connolly", "Coxly", "CSP", "EB", "EQ", "Esterfield", "Edgemead", "EJ", "Farleigh", "Faymere", "FR", "FQ", "FW", "Greenslade", "HS", "LSR", "LC", "LbtS", "Millcastle", "Morganstown", "NH", "Newry", "Northshore", "PB", "RB", "T1", "T2", "T3", "SC", "SV", "SHB", "SE", "UFC", "WB", "WF", "WHL", "WFL", "WN", "WC", "WW"]
 )
 
 ; --- GUI ---
 myGui := Gui("+AlwaysOnTop -SysMenu -Caption", "SCR")
 myGui.BackColor := 0x000000
 myGui.Icon := "C:\Users\Wlad\Downloads\Ahk\Icons\SCR.ico"
-myGui.SetFont("s16 w700", "Arial Black")
+myGui.SetFont("s14 w700", "Arial Black")
 myGui.opt("+SysMenu +Caption")
 
 ; --- Роль ---
 global Text1 := myGui.Add("Text", "cffffff", "Роль")
-global RoleList := myGui.Add("dropdownList", "w80 r5 Choose1", ["OFF", "GD", "DS", "QD", "SG"])
+global RoleList := myGui.Add("dropdownList", "w70 r5 Choose1", ["OFF", "GD", "DS", "QD", "SG"])
 RoleList.OnEvent("Change", RoleUpdate)
 
 ; --- Текст ---
 myGui.Add("Text", "cFFFFFF", "Текст")
-global TextList := myGui.Add("dropdownList", "w360 r3")
+global TextList := myGui.Add("dropdownList", "w350 r3")
 TextList.OnEvent("Change", TextUpdate)
+RoleUpdate
 
 ; --- Станция ---
 myGui.Add("Text", "cFFFFFF", "Станция")
-global StationBox := myGui.Add("ComboBox", "Simple w380 r2")
-StationBox.Add(Stationlist[false])
+global StationBox := myGui.Add("ComboBox", "w350 r5")
+StationBox.Add(Stationlist[true])
 StationBox.OnEvent("Change", StationUpdate)
 
-global StationTypeBox := MyGui.Add("CheckBox", "w360 cFFFFFF", "Полное название станций")
+global StationTypeBox := MyGui.Add("CheckBox", "cFFFFFF", "Короткое название станций")
 StationTypeBox.OnEvent("Click", StationTypeUpdate)
 
 
 ; --- ГоловнойКод ---
-myGui.Add("Text", "cFFFFFF", "HeadCode")
-global Code := myGui.Add("Edit", "Limit4 Uppercase w80 r1")
+myGui.Add("Text", "cFFFFFF x260 y11", "HeadCode")
+global Code := myGui.Add("Edit", "Limit4 Uppercase w80 x290 y50 r1")
 Code.OnEvent("Change", CodeUpdate)
 
 
@@ -129,11 +130,9 @@ Print(ctrl) {
 
 StartTesting() {
 	global Working, MainFn
-	if ProcessExist() { 
-		Working := true
-		MainFn := Main
-		SetTimer(MainFn, 1)
-	}
+	Working := true
+	MainFn := Main
+	SetTimer(MainFn, 1)
 }
 
 StopTesting() {
@@ -229,16 +228,16 @@ Messeges(*) {
 		else if (Tixt = "Nearest station?") {
 			Print("Nearest station?")
 		}
-		else if (Tixt = "[DS ST] Safe shift!") {
-			Print("[DS " Station "] Safe shift!")
+		else if (Tixt = "[GD HC] - [ST DS] Safe shift!") {
+			Print("[GD " HeadCode "] - [" Station " DS] Safe shift!")
 		}
 	}
 	else if (Role = "DS") {
-		if (Tixt = "[HC] Safe trip!") {
-			Print("[" HeadCode "] Safe trip!")
+		if (Tixt = "[ST DS] - [HC] Safe trip!") {
+			Print("[" Station " DS] - [" HeadCode "] Safe trip!")
 		}
-		else if (Tixt = "[HC] Safe trip & GD!") {
-			Print("[" HeadCode "] Safe trip & GD!")
+		else if (Tixt = "[ST DS] - [HC & GD] Safe trip!") {
+			Print("[" Station " DS] - [" HeadCode " & GD] Safe trip!")
 		}
 	}
 	else if (Role = "QD") {
@@ -248,8 +247,8 @@ Messeges(*) {
 		else if (Tixt = "Nearest station - ST") {
 			Print("Nearest station - " Station)
 		}
-		else if (Tixt = "[DS ST] Safe shift!") {
-			Print("[DS " Station "] Safe shift!")
+		else if (Tixt = "[HC] - [ST DS] Safe shift!") {
+			Print("[" HeadCode "] - [" Station " DS] Safe shift!")
 		}
 	}
 	else if (Role = "SG") {
@@ -259,8 +258,8 @@ Messeges(*) {
 		else if (Tixt = "Zone # on automatic control!") {
 			Print("Zone " HeadCode " on automatic control!")
 		}
-		else if (Tixt = "[DS ST] please dispatch HC!") {
-			Print("[DS " Station "] please dispatch " HeadCode "!")
+		else if (Tixt = "[ST DS] please dispatch HC!") {
+			Print("[" Station " DS] please dispatch " HeadCode "!")
 		}
 	}
 }
