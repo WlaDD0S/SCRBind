@@ -15,7 +15,7 @@
 | DS   | "[ST DS] - [HC] Safe trip!", "[ST DS] - [HC & GD] Safe trip!" | Нажатие "TRTS", "CD", "RA" |
 | QD   | "Free GD?", "Nearest station - ST", "[HC] - [ST DS] Safe shift!" | Всё связанное с дверями и охранником, а также AWS и SPAD |
 
-HC - HeadCode
+HC - HeadCode,
 ST - Station
 
 ## Горячие клавиши
