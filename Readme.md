@@ -14,7 +14,6 @@
 | GD   | "Someone need GD?", "Nearest station?", "[GD HC] - [ST DS] Safe shift!" | Прибытие и отправка с диспетчером и без него |
 | DS   | "[ST DS] - [HC] Safe trip!", "[ST DS] - [HC & GD] Safe trip!" | Нажатие "TRTS", "CD", "RA" |
 | QD   | "Free GD?", "Nearest station - ST", "[HC] - [ST DS] Safe shift!" | Всё связанное с дверями и охранником, а также AWS и SPAD |
-| SG   | "Zone # on manual control!", "Zone # on automatic control!", "[ST DS] please dispatch HC!" | Ничего |
 
 HC - HeadCode
 ST - Station
