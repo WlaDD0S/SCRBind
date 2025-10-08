@@ -1,1 +1,0 @@
-python -m PyInstaller SCRBind.spec --clean --distpath .
