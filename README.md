@@ -81,7 +81,7 @@
    ```bash
    pip install pytesseract pillow pygetwindow keyboard pyautogui
    ```
-3. Установите **Tesseract OCR**  [с официального сайта](https://github.com/tesseract-ocr/tesseract)
+3. Установите [**Tesseract OCR**](https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-v5.3.0.20221214.exe)
 4. Запустите программу
 
 ---
