@@ -12,7 +12,6 @@ import cv2
 import numpy as np
 
 class SCRBot:
-    # [ИЗМЕНЕНО] Все настройки вынесены в один словарь для удобства
     CONFIG = {
         "tesseract_path": r"C:\Program Files\Tesseract-OCR\tesseract.exe",
         "game_window_title": "Roblox",
