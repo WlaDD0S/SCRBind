@@ -1,79 +1,85 @@
 # -*- coding: utf-8 -*-
 import re
 import time
-import pytesseract
-import keyboard
-import threading
 import traceback
+from tkinter import Tk, Label, Entry, Text, END, StringVar, ttk
 import pygetwindow as gw
-from tkinter import *
-from tkinter import ttk
-from PIL import ImageGrab, ImageOps, ImageEnhance, ImageFilter
-
-# --- Настройка pytesseract ---
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
+import keyboard
+import pytesseract
+from PIL import ImageGrab
+import os
+import cv2
+import numpy as np
 
 class SCRBot:
+    # [ИЗМЕНЕНО] Все настройки вынесены в один словарь для удобства
+    CONFIG = {
+        "tesseract_path": r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        "game_window_title": "Roblox",
+        "ocr_bbox": (1730, 450, 1840, 520),
+        "intervals": {
+            "main": 100,
+            "ocr": 200,
+        },
+        "cooldowns": {
+            "TRTS": 5.0, "CD": 5.0, "RA": 5.0,
+            "Open LD": 4.5, "Open PD": 2.0, "Whistle": 4.0, "Close PD": 8.0, "Close LD": 4.5, "Torch": 2.0, "Buzzer (Guard)": 2.0,
+            "AWS": 0.5, "SPAD": 2.0, "Close Doors": 2.0, "Buzzer (Driver)": 1.5, "Open Doors": 1.5
+        },
+        "pixel_checks": {
+            "TRTS": (1710, 605, (232, 74, 182)), "CD": (1785, 605, (232, 74, 182)), "RA": (1860, 605, (232, 74, 182)),
+            "Open LD": (143, 570, (246, 165, 2)), "Open PD": (120, 500, (234, 0, 0)), "Whistle": (1720, 595, (232, 74, 182)), "Close PD": (120, 600, (0, 86, 223)), "Torch": (1795, 595, (232, 74, 182)), "Close LD": (131, 725, (236, 244, 252)), "Buzzer (Guard)": (120, 405, (0, 233, 233)),
+            "AWS": (1765, 850, (255, 170, 0)), "SPAD": (1670, 940, (255, 61, 61)), "Close Doors": (1400, 690, (232, 74, 182)), "Buzzer (Driver)": (350, 760, (232, 74, 182)), "Open Doors": (1400, 690, (45, 142, 249)),
+        }
+    }
+
     def __init__(self, root):
         self.root = root
-        self.role = "Off"
-        self.text_choice = ""
-        self.station = ""
-        self.headcode = ""
-        self.last_seen_code = ""
-        self.last_seen_time = 0.0
-        self.pixel_cooldowns = {}
-
-        # Настройки
-        self.pixel_cooldown_time = 2.0
-        self.pixel_cooldown_times = {
-            "TRTS": 5.0, "CD": 5.0, "RA": 5.0, "Whistle": 3.5, "Buzzer (Guard)": 2.0,
-            "AWS": 1.0, "Open LD": 4.5, "Close LD": 4.5, "Open PD": 2.0, "Close PD": 4.0,
-            "Torch": 2.0, "Close Doors": 2.0, "Buzzer (Driver)": 1.5, "Open Doors": 1.5
-        }
-
         self.running = False
-        self.require_focus = True
-        self.game_window_title = "Roblox"
-        self.ocr_interval = 400
-        self.main_interval = 100
-        self.ocr_bbox = (1730, 450, 1840, 520)
-
-        # Координаты пикселей
-        self.pixel_checks = {
-            "Open LD": (143, 570, (246, 165, 2)),
-            "Whistle": (1720, 595, (232, 74, 182)),
-            "Close PD": (120, 600, (0, 86, 223)),
-            "Buzzer (Guard)": (120, 400, (0, 220, 220)),
-            "Torch": (1795, 595, (232, 74, 182)),
-            "Close LD": (102, 725, (237, 245, 253)),
-            "Open PD": (120, 500, (234, 0, 0)),
-            "TRTS": (1710, 605, (232, 74, 182)),
-            "CD": (1785, 605, (232, 74, 182)),
-            "RA": (1860, 605, (232, 74, 182)),
-            "AWS": (1765, 850, (255, 170, 0)),
-            "Close Doors": (1400, 690, (232, 74, 182)),
-            "Buzzer (Driver)": (350, 760, (232, 74, 182)),
-            "Open Doors": (1400, 690, (45, 142, 249)),
-        }
+        self.role = "Off"
+        self.last_seen_code = ""
+        self.pixel_cooldowns = {}
+        
+        self._setup_tesseract()
 
         self.role_messages = {
             "Guarding": ["Someone need GD?", "Nearest station?", "[ST DS] Safe shift!"],
             "Dispatching": ["[HC] Safe trip!", "[HC & GD] Safe trip!"],
-            "Driving": ["Free GD?", "Nearest station - ST", "[ST DS] Safe shift!"],
+            "Driving": ["I need GD", "Nearest station - ST", "[ST DS] Safe shift!"],
             "Off": ["Выберите роль!"]
+        }
+        
+        self.role_key_map = {
+            "Guarding": ["Open LD", "Close LD", "Whistle", "Close PD", "Torch", "Open PD", "Buzzer (Guard)"],
+            "Dispatching": ["TRTS", "CD", "RA"],
+            "Driving": ["AWS", "SPAD", "Close Doors", "Buzzer (Driver)", "Open Doors"],
+        }
+        
+        self.action_to_key_map = {
+            "TRTS": "q", "CD": "t", "Open LD": "e", "Close LD": "e", "Whistle": "q",
+            "Open PD": "t", "Close PD": "y", "Torch": "r", "AWS": "q", "Close Doors": "t",
+            "Open Doors": "t", "Buzzer (Driver)": "t", "SPAD": "q"
         }
 
         self._build_gui()
         self._register_hotkeys()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-    # ---------------- GUI ----------------
+    def _setup_tesseract(self):
+        try:
+            tesseract_path = self.CONFIG["tesseract_path"]
+            if not os.path.isfile(tesseract_path):
+                self.log(f"⚠️ Tesseract не найден по пути: {tesseract_path}")
+                self.log("Проверьте путь в CONFIG или установите Tesseract-OCR.")
+                return
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        except Exception as e:
+            self.log(f"⚠️ Критическая ошибка при настройке Tesseract: {e}")
+
     def _build_gui(self):
         r = self.root
-        r.title("SCRBind")
-        r.geometry("300x260")
+        r.title("SCRBindv2.0")
+        r.geometry("300x270")
         r.configure(bg="black")
         r.attributes("-topmost", True)
 
@@ -83,20 +89,29 @@ class SCRBot:
         role_box.place(x=10, y=35, width=120)
         role_box.bind("<<ComboboxSelected>>", self._on_role_change)
 
-        self.code_text = Label(r, text="HeadCode", fg="white", bg="black", font=("Arial", 12, "bold"))
+        self.code_label = Label(r, text="HeadCode", fg="white", bg="black", font=("Arial", 12, "bold"))
         self.code_var = StringVar()
-        self.code_edit = Entry(r, textvariable=self.code_var, width=10, justify="center")
+        self.code_edit = Entry(r, textvariable=self.code_var, width=10, justify="center", bg="white")
 
+        def validate_code(new_value):
+            if new_value == "": return True
+            return bool(re.match(r"^[1-9]?[A-Z]?[0-9]{0,2}$", new_value.upper()))
+        
+        vcmd = (r.register(validate_code), "%P")
+        self.code_edit.config(validate="key", validatecommand=vcmd)
 
-        self.text_text = Label(r, text="Текст", fg="white", bg="black", font=("Arial", 12, "bold"))
+        def on_code_change(*_):
+            self.code_var.set(self.code_var.get().upper())
+        self.code_var.trace_add("write", on_code_change)
+
+        self.station_label = Label(r, text="Станция", fg="white", bg="black", font=("Arial", 12, "bold"))
+        self.station_var = StringVar()
+        self.station_box = ttk.Combobox(r, textvariable=self.station_var, values=["Stepford Central", "Newry Harbour", "Connolly", "..."], state="readonly")
+
+        Label(r, text="Текст", fg="white", bg="black", font=("Arial", 12, "bold")).place(x=10, y=70)
         self.text_var = StringVar()
         self.text_box = ttk.Combobox(r, textvariable=self.text_var, values=[], state="readonly")
-        self.text_box.bind("<<ComboboxSelected>>", self._on_text_change)
-
-        self.station_text = Label(r, text="Станция", fg="white", bg="black", font=("Arial", 12, "bold"))
-        self.station_var = StringVar()
-        self.station_box = ttk.Combobox(r, textvariable=self.station_var, values=[ "Stepford Central", "Newry Harbour", "Connolly", "Cambridge Street Parkway", "Esterfield", "Benton", "St Helens Bridge", "Stepford East", "Four Ways", "Stepford Victoria", "Airport Central", "Elsemere Junction", "Leighton City", "City Hospital", "Financial Quarter", "Beechley", "High Street", "Willowfield", "Hemdon Park", "Whitefield", "Whitefield Lido", "Stepford UFC", "Woodhead Lane", "Houghton Rake", "New Harrow", "Elsemere Pond", "Berrily", "East Berrily", "Beaulieu Park", "Morganstown", "Angel Pass", "Bodin", "Coxly", "Port Benton", "Benton Bridge", "Airport Parkway", "Hampton Hargate", "Upper Staploe", "Water Newton", "Rocket Parade", "Leighton Stepford Road", "Edgemead", "Faymere", "Westercoast", "Millcastle Racecourse", "Millcastle", "Westwyvern", "Northshore", "Llyn-by-the-Sea", "Newry", "Eden Quay", "Faraday Road", "West Benton", "Ashlan Park", "Airport West", "James Street", "Morganstown Docks", "Whitney Green", "Greenslade", "Terminal 1", "Terminal 2", "Terminal 3"])
-        self.station_box.bind("<<ComboboxSelected>>", self._on_station_change)
+        self.text_box.place(x=10, y=95, width=180)
 
         Label(r, text="Лог", fg="white", bg="black", font=("Arial", 12, "bold")).place(x=10, y=130)
         self.log_box = Text(r, height=6, width=46, fg="white", bg="black", font=("Arial", 8, "bold"))
@@ -104,263 +119,188 @@ class SCRBot:
 
     def log(self, *args):
         msg = " ".join(str(a) for a in args)
-        self.log_box.insert(END, msg + "\n")
+        self.log_box.insert(END, f"{msg}\n")
         self.log_box.see(END)
 
-    # ---------------- Hotkeys ----------------
     def _register_hotkeys(self):
-        try:
-            keyboard.add_hotkey("f6", self._toggle_visibility)
-            keyboard.add_hotkey("f7", lambda: self.root.after(0, self.messages))
-            self.log("[F6] скрыть/показать  |  [F7] отправить сообщение")
-        except Exception as e:
-            self.log("Ошибка hotkeys:", e)
+        keyboard.add_hotkey("f6", self._toggle_visibility)
+        keyboard.add_hotkey("f7", self.messages)
+        self.log("[F6] скрыть/показать | [F7] отправить")
 
     def _toggle_visibility(self):
-        if self.root.state() == "withdrawn":
-            self.root.deiconify()
-        else:
+        if self.root.winfo_viewable():
             self.root.withdraw()
+        else:
+            self.root.deiconify()
 
-    # ---------------- Выборы ----------------
     def _on_role_change(self, *_):
         self.role = self.role_var.get()
         vals = self.role_messages.get(self.role, [])
         self.text_box["values"] = vals
         if vals:
             self.text_box.current(0)
-            self.text_choice = vals[0]
-
-        # Скрыть всё по умолчанию
-        self.station_box.place_forget()
-        self.station_text.place_forget()
-        self.code_edit.place_forget()
-        self.code_text.place_forget()
-        self.text_text.place_forget()
-        self.text_box.place_forget()
-
+            self.text_var.set(vals[0])
+        self._toggle_fields()
         if self.role == "Off":
             self.stop()
         else:
             self.start()
 
+    def _toggle_fields(self):
+        for w in [self.code_edit, self.code_label, self.station_box, self.station_label]:
+            w.place_forget()
         if self.role == "Dispatching":
+            self.code_label.place(x=160, y=10)
             self.code_edit.place(x=160, y=35)
-            self.code_text.place(x=160, y=10)
-            self.text_text.place(x=10, y=70)
-            self.text_box.place(x=10, y=95, width=120)
         elif self.role in ["Guarding", "Driving"]:
+            self.station_label.place(x=160, y=10)
             self.station_box.place(x=160, y=35, width=120)
-            self.station_text.place(x=160, y=10)
-            self.text_text.place(x=10, y=70)
-            self.text_box.place(x=10, y=95, width=120)
 
-        
-
-    def _on_text_change(self, *_):
-        self.text_choice = self.text_var.get()
-
-    def _on_station_change(self, *_):
-        self.station = self.station_var.get()
-
-    # ---------------- Roblox Focus ----------------
     def is_game_focused(self):
         try:
             win = gw.getActiveWindow()
-            return bool(win and "roblox" in win.title.lower())
+            return bool(win and self.CONFIG["game_window_title"].lower() in win.title.lower())
         except Exception:
             return False
 
-    def pixel_ready(self, key, cooldown=None):
-        cooldown = cooldown or self.pixel_cooldown_times.get(key, self.pixel_cooldown_time)
-        now = time.time()
-        last = self.pixel_cooldowns.get(key, 0)
-        if now - last >= cooldown:
-            self.pixel_cooldowns[key] = now
-            return True
-        return False
-
-    # ---------------- Эмуляция клавиш ----------------
     def send_key(self, key):
         if not self.is_game_focused():
             self.log("⛔ Roblox не в фокусе")
             return
         try:
-            keyboard.press(key)
-            time.sleep(0.05)
-            keyboard.release(key)
+            keyboard.press_and_release(key)
         except Exception as e:
-            self.log("Keyboard error:", e)
+            self.log(f"⚠️ Ошибка отправки клавиши {key}: {e}")
 
-    def send_message(self, msg):
+    def send_input(self, text):
         if not self.is_game_focused():
-            self.log("❌ Roblox не в фокусе — сообщение не отправлено")
+            self.log("⛔ Roblox не в фокусе")
             return
-        try:
-            keyboard.press('/')
-            time.sleep(0.05)
-            keyboard.release('/')
-            keyboard.write(msg)
-            keyboard.press('enter')
-            time.sleep(0.05)
-            keyboard.release('enter')
-            self.log("💬", msg)
-        except Exception as e:
-            self.log("Send message error:", e)
+        keyboard.press('/')
+        time.sleep(0.1)
+        keyboard.release('/')
+        time.sleep(0.1)
+        keyboard.write(text)
+        time.sleep(0.5)
+        keyboard.press('Enter')
+        time.sleep(0.1)
+        keyboard.release('Enter')
+        self.log(f"💬 {text}")
 
-    # ---------------- OCR ----------------
+    # [ИЗМЕНЕНО] Полностью переработанная функция OCR
     def ocr_task(self):
         if not self.running or self.role != "Dispatching":
-            self.root.after(self.ocr_interval, self.ocr_task)
             return
-
         try:
-            img = ImageGrab.grab(bbox=self.ocr_bbox)
-            img = ImageOps.grayscale(img)
-            img = ImageEnhance.Contrast(img).enhance(2.0)
-            img = img.filter(ImageFilter.SHARPEN)
-
-            raw_text = pytesseract.image_to_string(img, config="--psm 7").strip().upper()
-            raw_text = raw_text.replace(" ", "").replace("\n", "")
-
-            if re.fullmatch(r"[1239][A-Z][0-9]{2}", raw_text):
-                if raw_text != self.last_seen_code:
-                    self.log(f"✅ Новый HeadCode: {raw_text}")
-                    self.code_var.set(raw_text)
-                self.headcode = raw_text
-                self.last_seen_code = raw_text
-                self.last_seen_time = time.time()
-            else:
-                pass
-
+            pil_img = ImageGrab.grab(bbox=self.CONFIG["ocr_bbox"])
+            cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+            inverted = cv2.bitwise_not(gray)
+            _, thresh = cv2.threshold(inverted, 128, 255, cv2.THRESH_BINARY)
+            custom_config = r'--psm 7 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+            text = pytesseract.image_to_string(thresh, config=custom_config).strip()
+            
+            # Валидация и обновление
+            if re.fullmatch(r"[1239][A-Z][0-9]{2}", text) and text != self.last_seen_code:
+                self.log(f"✅ HeadCode: {text}")
+                self.code_var.set(text)
+                self.last_seen_code = text
         except Exception as e:
-            self.log("OCR error:", e)
+            self.log(f"OCR error: {e}")
         finally:
-            self.root.after(self.ocr_interval, self.ocr_task)
+            if self.running:
+                self.root.after(self.CONFIG["intervals"]["ocr"], self.ocr_task)
 
-    # ---------------- Messages ----------------
+
     def messages(self):
         if not self.is_game_focused():
-            self.log("Roblox не активно — отмена")
+            self.log("⛔ Roblox не в фокусе")
             return
-        r, t = self.role, self.text_choice
-        msg = ""
-        if r == "Guarding":
-            if t == "[ST DS] Safe shift!":
-                msg = f"[{self.station} DS] Safe shift!"
-            else:
-                msg = t
-        elif r == "Dispatching":
-            if t == "[HC] Safe trip!":
-                msg = f"[{self.headcode}] Safe trip!"
-            elif t == "[HC & GD] Safe trip!":
-                msg = f"[{self.headcode} & GD] Safe trip!"
-        elif r == "Driving":
-            if t == "Nearest station - ST":
-                msg = f"Nearest station - {self.station}"
-            elif t == "[ST DS] Safe shift!":
-                msg = f"[{self.station} DS] Safe shift!"
-            else:
-                msg = t
-        if msg:
-            self.send_message(msg)
+        msg = self.text_var.get()
+        station = self.station_var.get()
+        headcode = self.code_var.get()
+        
+        if "[ST DS]" in msg and station:
+            msg = msg.replace("[ST DS]", f"[{station} DS]")
+        elif "[HC & GD]" in msg and headcode:
+            msg = msg.replace("[HC & GD]", f"[{headcode} & GD]")
+        elif "[HC]" in msg and headcode:
+            msg = msg.replace("[HC]", f"[{headcode}]")
+        elif "ST" in msg and station:
+            msg = msg.replace("ST", station)
+            
+        if msg not in self.role_messages.get(self.role, []):
+            self.send_input(msg)
+        else:
+            self.send_input(msg)
 
-    # ---------------- Основной цикл ----------------
+
+    def _clear_headcode(self):
+        self.code_var.set("")
+        self.last_seen_code = ""
+
     def main_task(self):
-        if not self.running:
+        if not self.running or not self.is_game_focused():
+            if self.running:
+                self.root.after(self.CONFIG["intervals"]["main"], self.main_task)
             return
-        if not self.is_game_focused():
-            self.root.after(self.main_interval, self.main_task)
-            return
+
         try:
-            r = self.role
-            if r == "Guarding":
-                if self._pixel_is("Open LD") and self.pixel_ready("Open LD"):
-                    self.log("✅ Open LD — E")
-                    self.send_key("e")
-                elif self._pixel_is("Close LD") and self.pixel_ready("Close LD"):
-                    self.log("✅ Close LD — E")
-                    self.send_key("e")
-                elif self._pixel_is("Whistle") and self.pixel_ready("Whistle"):
-                    self.log("✅ Whistle — Q")
-                    self.send_key("q")
-                elif self._pixel_is("Close PD") and self.pixel_ready("Close PD"):
-                    self.log("✅ Close PD — Y")
-                    self.send_key("y")
-                elif self._pixel_is("Torch") and self.pixel_ready("Torch"):
-                    self.log("✅ Torch — R")
-                    self.send_key("r")
-                elif self._pixel_is("Open PD") and self.pixel_ready("Open PD"):
-                    self.log("✅ Open PD — T")
-                    self.send_key("t")
-
-            elif r == "Dispatching":
-                if self._pixel_is("TRTS") and self.pixel_ready("TRTS"):
-                    self.log("✅ TRTS — Q")
-                    self.send_key("q")
-                elif self._pixel_is("CD") and self.pixel_ready("CD"):
-                    self.log("✅ CD — T")
-                    self.send_key("t")
-                elif self._pixel_is("RA") and self.pixel_ready("RA"):
-                    self.log("✅ RA — R")
-                    self.send_key("r")
-                    threading.Timer(2.5, self.messages).start()
-
-            elif r == "Driving":
-                if self._pixel_is("AWS") and self.pixel_ready("AWS"):
-                    self.log("✅ AWS — Q")
-                    self.send_key("q")
-                elif self._pixel_is("Close Doors") and self.pixel_ready("Close Doors"):
-                    self.log("✅ Close Doors — T")
-                    self.send_key("t")
-                elif self._pixel_is("Buzzer (Driver)") and self.pixel_ready("Buzzer (Driver)"):
-                    self.log("✅ Buzzer — T")
-                    self.send_key("t")
-                elif self._pixel_is("Open Doors") and self.pixel_ready("Open Doors"):
-                    self.log("✅ Open Doors — T")
-                    self.send_key("t")
+            screenshot = ImageGrab.grab()
+            now = time.time()
+            
+            keys_to_check = self.role_key_map.get(self.role, [])
+            
+            for action in keys_to_check:
+                if action not in self.CONFIG["pixel_checks"]: continue
+                
+                x, y, target_color = self.CONFIG["pixel_checks"][action]
+                
+                if screenshot.getpixel((x, y)) == target_color:
+                    last_time = self.pixel_cooldowns.get(action, 0)
+                    cooldown = self.CONFIG["cooldowns"].get(action, 2.0)
+                    
+                    if now - last_time >= cooldown:
+                        self.pixel_cooldowns[action] = now
+                        
+                        if action == "RA":
+                            time.sleep(0.2)
+                            self.send_key("r")
+                            self.log("✅ RA — R")
+                            self.root.after(2500, self.messages)
+                            self.root.after(5000, self._clear_headcode)
+                        elif action in self.action_to_key_map:
+                            key_to_press = self.action_to_key_map[action]
+                            time.sleep(1)
+                            self.send_key(key_to_press)
+                            self.log(f"✅ {action} — {key_to_press.upper()}")
 
         except Exception as e:
-            self.log("Main loop error:", e)
-            traceback.print_exc()
+            self.log("Main loop error:")
+            self.log(traceback.format_exc())
         finally:
-            self.root.after(self.main_interval, self.main_task)
-
-    def _pixel_is(self, key):
-        try:
-            import pyautogui
-            x, y, color = self.pixel_checks[key]
-            return pyautogui.pixel(x, y) == color
-        except Exception:
-            return False
-
-    # ---------------- Управление ----------------
+            if self.running:
+                self.root.after(self.CONFIG["intervals"]["main"], self.main_task)
+    
     def start(self):
-        if self.running:
-            return
+        if self.running: return
         self.running = True
-        self.log("▶️ Старт — режим:", self.role)
-        self.root.after(0, self.ocr_task)
-        self.root.after(0, self.main_task)
+        self.log(f"▶️ Запуск режима: {self.role}")
+        self.root.after(self.CONFIG["intervals"]["main"], self.main_task)
+        if self.role == "Dispatching":
+            self.root.after(self.CONFIG["intervals"]["ocr"], self.ocr_task)
 
     def stop(self):
-        if not self.running:
-            return
+        if not self.running: return
         self.running = False
         self.log("⏹️ Стоп")
 
     def on_close(self):
         self.stop()
-        try:
-            keyboard.unhook_all_hotkeys()
-        except Exception:
-            pass
+        keyboard.unhook_all_hotkeys()
         self.root.destroy()
 
-
-# --- Запуск ---
 if __name__ == "__main__":
     root = Tk()
-    root.iconbitmap(r"C:\Users\WlaDD0S\Downloads\pip\SCR.ico")
     app = SCRBot(root)
     root.mainloop()
